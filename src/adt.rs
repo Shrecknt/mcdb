@@ -59,7 +59,7 @@ impl ServerMap {
         }
 
         for player in &server.players {
-            let player = player.lock().unwrap();
+            let player = player.lock().unwrap().clone();
             // let found = self.player_array.get(&*player);
             // ^ does not work because return value of `get`
             // is immutable, and we need a mutable reference
