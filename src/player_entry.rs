@@ -1,11 +1,7 @@
-use std::{
-    cmp::Ordering,
-    error::Error,
-    sync::{Arc, LockResult, MutexGuard},
-    vec,
-};
+use std::{cmp::Ordering, error::Error, sync::Arc, vec};
 
-use tokio::{io::AsyncWriteExt, sync::Mutex};
+use parking_lot::Mutex;
+use tokio::io::AsyncWriteExt;
 use uuid::{uuid, Uuid};
 
 use crate::server_entry::Server;
@@ -81,35 +77,32 @@ impl Clone for Player {
 }
 
 #[derive(Debug, Clone)]
-pub struct PlayerArcWrapper(Arc<std::sync::Mutex<Player>>);
+pub struct PlayerArcWrapper(Arc<parking_lot::Mutex<Player>>);
 
 impl PlayerArcWrapper {
     pub fn new(player: Player) -> Self {
-        Self(Arc::new(std::sync::Mutex::new(player)))
+        Self(Arc::new(parking_lot::Mutex::new(player)))
     }
-    pub fn lock(&self) -> LockResult<MutexGuard<'_, Player>> {
+    pub fn lock(&self) -> parking_lot::lock_api::MutexGuard<'_, parking_lot::RawMutex, Player> {
         self.0.lock()
     }
 }
 
 impl PartialOrd for PlayerArcWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0
-            .lock()
-            .unwrap()
-            .partial_cmp(&other.0.lock().unwrap().clone())
+        self.0.lock().partial_cmp(&other.0.lock().clone())
     }
 }
 
 impl Ord for PlayerArcWrapper {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.lock().unwrap().cmp(&other.0.lock().unwrap().clone())
+        self.0.lock().cmp(&other.0.lock().clone())
     }
 }
 
 impl PartialEq for PlayerArcWrapper {
     fn eq(&self, other: &Self) -> bool {
-        self.0.lock().unwrap().eq(&other.0.lock().unwrap().clone())
+        self.0.lock().eq(&other.0.lock().clone())
     }
 }
 

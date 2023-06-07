@@ -13,7 +13,8 @@ use std::{error::Error, sync::Arc};
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
-use tokio::sync::Mutex;
+
+use parking_lot::Mutex;
 
 use uuid::uuid;
 
@@ -24,16 +25,17 @@ async fn handle_connection(
     map: Arc<Mutex<ServerMap>>,
 ) -> Result<(), Box<dyn Error>> {
     loop {
-        let mut buf = [0u8; 6];
+        let mut buf = [0u8; 8];
         let _ = socket.read_exact(&mut buf).await?;
         let mut push_bst: BTreeSet<PlayerArcWrapper> = BTreeSet::new();
+        let name = std::str::from_utf8(&buf[6..8]).unwrap();
         push_bst.insert(PlayerArcWrapper::new(Player {
-            name: "test".to_string(),
+            name: name.to_string(),
             uuid: uuid!("F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4"),
             servers: vec![],
         }));
 
-        let mut lock = map.lock().await;
+        let mut lock = map.lock();
 
         lock.insert(Arc::new(Mutex::new(Server {
             addr: SocketAddr::V4(SocketAddrV4::new(
@@ -52,7 +54,18 @@ async fn handle_connection(
             )))
             .await?
             .unwrap();
-        println!("found: {:?}", found.lock().await);
+
+        println!("found: {:?}", found.lock());
+
+        println!(
+            "found players: {:?}",
+            found
+                .lock()
+                .players
+                .iter()
+                .map(|item| { item.lock().name.clone() })
+                .collect::<Vec<String>>()
+        );
 
         drop(lock);
     }
@@ -60,6 +73,29 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    {
+        use parking_lot::deadlock;
+        use std::thread;
+        use std::time::Duration;
+        // Create a background thread which checks for deadlocks every 10s
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_secs(10));
+            let deadlocks = deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            println!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                println!("Deadlock #{i}");
+                for t in threads {
+                    println!("Thread Id {:#?}", t.thread_id());
+                    println!("{:#?}", t.backtrace());
+                }
+            }
+        });
+    }
+
     let map = Arc::new(Mutex::new(ServerMap::new()));
 
     let listener = TcpListener::bind("127.0.0.1:38282").await?;

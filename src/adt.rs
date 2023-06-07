@@ -3,9 +3,9 @@ use std::error::Error;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
-use crate::player_entry::Player;
+use crate::player_entry::{Player, PlayerArcWrapper};
 use crate::server_entry::Server;
 
 const PRE_RESERVE: bool = false;
@@ -28,7 +28,7 @@ impl ServerMap {
     }
 
     pub async fn insert(&mut self, server_arc: Arc<Mutex<Server>>) -> Result<(), Box<dyn Error>> {
-        let server = server_arc.lock().await;
+        let server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
             _ => return Err("Not an IPv4 Address".into()),
@@ -47,19 +47,27 @@ impl ServerMap {
         });
 
         let open = open.get_mut(&a).unwrap().clone();
-        let mut open = open.lock().await;
+        let mut open = open.lock();
         open.entry(b).or_insert_with(HashMap::new);
 
         let open = open.get_mut(&b).unwrap();
         let find = open.get(&server.addr.port());
+        let inserted_arc: Arc<Mutex<Server>>;
         if find.is_some() {
-            find.unwrap().lock().await.update(&server);
+            inserted_arc = find.unwrap().clone();
+            let temp = inserted_arc.clone();
+            let mut temp_lock = temp.lock();
+            temp_lock.update(&server);
+            drop(temp_lock);
         } else {
-            open.insert(server.addr.port(), server_arc.clone());
+            inserted_arc = server_arc.clone();
+            open.insert(server.addr.port(), inserted_arc.clone());
         }
+        println!("inserted_arc: {:?}", inserted_arc);
 
-        for player in &server.players {
-            let player = player.lock().unwrap().clone();
+        let server_players = server.players.clone();
+        for player in server_players.iter() {
+            let player = player.lock().clone();
             // let found = self.player_array.get(&*player);
             // ^ does not work because return value of `get`
             // is immutable, and we need a mutable reference
@@ -68,6 +76,7 @@ impl ServerMap {
             // this is inefficient
             // TODO: use a RefCell?
             let found = self.player_array.take(&player);
+            println!("found: {found:?}");
             let to_insert: Player = if found.is_some() {
                 let mut found = found.unwrap();
                 found.update(&player);
@@ -81,6 +90,31 @@ impl ServerMap {
                 res.servers.push(server_arc.clone());
                 res
             };
+            println!("A");
+
+            let mut server = inserted_arc.lock();
+
+            println!("to_insert: {to_insert:?}");
+            println!("server.players: {:?}", server.players);
+            let wrapper = PlayerArcWrapper::new(to_insert.clone());
+            let contains = server.players.contains(&wrapper);
+            println!("contains: {contains}");
+            let pull = server.players.take(&wrapper);
+            println!("pull: {pull:?}");
+            let pull_modified: PlayerArcWrapper = if pull.is_none() {
+                wrapper
+            } else {
+                let res = pull.unwrap();
+                res.lock().update(&to_insert);
+                res
+            };
+
+            println!("inserting: {pull_modified:?}");
+            println!("server 1: {server:?}");
+
+            server.players.insert(pull_modified);
+
+            println!("server 2: {server:?}");
 
             self.player_array.insert(to_insert);
         }
@@ -105,7 +139,7 @@ impl ServerMap {
             return Ok(None);
         }
         let open = open.get_mut(&a).unwrap();
-        let mut open = open.lock().await;
+        let mut open = open.lock();
         if !open.contains_key(&b) {
             return Ok(None);
         }
@@ -135,7 +169,7 @@ fn u8s_to_u16(a: u8, b: u8) -> u16 {
 
 async fn player_has_server(player: &Player, server: &Server) -> Result<bool, Box<dyn Error>> {
     for player_server in &player.servers {
-        if *player_server.lock().await == *server {
+        if *player_server.lock() == *server {
             return Ok(true);
         }
     }
