@@ -54,7 +54,7 @@ impl ServerMap {
         let find = open4.get(&server.addr.port());
         let inserted_arc: Arc<Mutex<Server>>;
         if find.is_some() {
-            inserted_arc = find.unwrap().clone();
+            inserted_arc = unsafe { find.unwrap_unchecked() }.clone();
             let temp = inserted_arc.clone();
             let mut temp_lock = temp.lock();
             temp_lock.update(&server);
@@ -78,7 +78,7 @@ impl ServerMap {
             let found = self.player_array.take(&player);
             println!("found: {found:?}");
             let to_insert: Player = if found.is_some() {
-                let mut found = found.unwrap();
+                let mut found = unsafe { found.unwrap_unchecked() };
                 found.update(&player);
                 let has_server = player_has_server(&found, &server)?;
                 if !has_server {
@@ -104,7 +104,7 @@ impl ServerMap {
             let pull_modified: PlayerArcWrapper = if pull.is_none() {
                 wrapper
             } else {
-                let res = pull.unwrap();
+                let res = unsafe { pull.unwrap_unchecked() };
                 res.lock().update(&to_insert);
                 res
             };
@@ -117,6 +117,8 @@ impl ServerMap {
             println!("server 2: {server:?}");
 
             self.player_array.insert(to_insert);
+
+            drop(server);
         }
 
         Ok(())
