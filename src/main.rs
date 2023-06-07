@@ -44,7 +44,6 @@ async fn handle_connection(
             )),
             players: push_bst,
         })))
-        .await
         .unwrap();
 
         let found = lock
@@ -52,7 +51,7 @@ async fn handle_connection(
                 Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]),
                 u8s_to_u16(buf[4], buf[5]),
             )))
-            .await?
+            .unwrap()
             .unwrap();
 
         println!("found: {:?}", found.lock());

@@ -27,7 +27,7 @@ impl ServerMap {
         }
     }
 
-    pub async fn insert(&mut self, server_arc: Arc<Mutex<Server>>) -> Result<(), Box<dyn Error>> {
+    pub fn insert(&mut self, server_arc: Arc<Mutex<Server>>) -> Result<(), Box<dyn Error>> {
         let server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
@@ -37,8 +37,8 @@ impl ServerMap {
         let a = u8s_to_u16(octets[0], octets[1]);
         let b = u8s_to_u16(octets[2], octets[3]);
 
-        let open = &mut self.server_array;
-        open.entry(a).or_insert_with(|| {
+        let open1 = &mut self.server_array;
+        open1.entry(a).or_insert_with(|| {
             let mut alloc_hashmap = HashMap::new();
             if PRE_RESERVE {
                 alloc_hashmap.reserve(65536);
@@ -46,12 +46,12 @@ impl ServerMap {
             Arc::new(Mutex::new(alloc_hashmap))
         });
 
-        let open = open.get_mut(&a).unwrap().clone();
-        let mut open = open.lock();
-        open.entry(b).or_insert_with(HashMap::new);
+        let open2 = open1.get_mut(&a).unwrap().clone();
+        let mut open3 = open2.lock();
+        open3.entry(b).or_insert_with(HashMap::new);
 
-        let open = open.get_mut(&b).unwrap();
-        let find = open.get(&server.addr.port());
+        let open4 = open3.get_mut(&b).unwrap();
+        let find = open4.get(&server.addr.port());
         let inserted_arc: Arc<Mutex<Server>>;
         if find.is_some() {
             inserted_arc = find.unwrap().clone();
@@ -61,7 +61,7 @@ impl ServerMap {
             drop(temp_lock);
         } else {
             inserted_arc = server_arc.clone();
-            open.insert(server.addr.port(), inserted_arc.clone());
+            open4.insert(server.addr.port(), inserted_arc.clone());
         }
         println!("inserted_arc: {:?}", inserted_arc);
 
@@ -80,7 +80,7 @@ impl ServerMap {
             let to_insert: Player = if found.is_some() {
                 let mut found = found.unwrap();
                 found.update(&player);
-                let has_server = player_has_server(&found, &server).await?;
+                let has_server = player_has_server(&found, &server)?;
                 if !has_server {
                     found.servers.push(server_arc.clone());
                 }
@@ -122,10 +122,7 @@ impl ServerMap {
         Ok(())
     }
 
-    pub async fn find(
-        &mut self,
-        addr: SocketAddr,
-    ) -> Result<Option<Arc<Mutex<Server>>>, Box<dyn Error>> {
+    pub fn find(&mut self, addr: SocketAddr) -> Result<Option<Arc<Mutex<Server>>>, Box<dyn Error>> {
         let octets: [u8; 4] = match addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
             _ => return Err("Not an IPv4 Address".into()),
@@ -167,7 +164,7 @@ fn u8s_to_u16(a: u8, b: u8) -> u16 {
     ((a as u16) << 8) | b as u16
 }
 
-async fn player_has_server(player: &Player, server: &Server) -> Result<bool, Box<dyn Error>> {
+fn player_has_server(player: &Player, server: &Server) -> Result<bool, Box<dyn Error>> {
     for player_server in &player.servers {
         if *player_server.lock() == *server {
             return Ok(true);
