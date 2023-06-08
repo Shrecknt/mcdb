@@ -28,8 +28,6 @@ impl ServerMap {
     }
 
     pub fn insert(&mut self, server_arc: Arc<Mutex<Server>>) -> Result<(), Box<dyn Error>> {
-        println!("insert");
-
         let server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
@@ -61,15 +59,10 @@ impl ServerMap {
             let mut temp_lock = temp.lock();
             temp_lock.update(&server);
             drop(temp_lock);
-
-            println!("AAAAA");
         } else {
             inserted_arc = server_arc.clone();
             open4.insert(server.addr.port(), inserted_arc.clone());
-
-            println!("BBBBB");
         }
-        println!("server: {:?}", server);
 
         let server_players = server.players.clone();
         for player in server_players.iter() {
@@ -82,7 +75,6 @@ impl ServerMap {
             // this is inefficient
             // TODO: use a RefCell?
             let found = self.player_array.take(&player);
-            println!("found: {found:?}");
             let to_insert: Player = if found.is_some() {
                 let mut found = unsafe { found.unwrap_unchecked() };
                 found.update(&player);

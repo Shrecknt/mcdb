@@ -35,7 +35,9 @@ impl Player {
     }
 
     #[allow(unused_variables)]
-    pub fn update(&mut self, other: &Player) {}
+    pub fn update(&mut self, other: &Player) {
+        println!("Merging self '{:?}' with other '{:?}'", self, other);
+    }
 }
 
 impl PartialOrd for Player {
