@@ -19,6 +19,7 @@ use parking_lot::Mutex;
 use uuid::uuid;
 
 use crate::player_entry::PlayerArcWrapper;
+use crate::server_entry::ServerArcWrapper;
 
 async fn handle_connection(
     socket: &mut TcpStream,
@@ -32,18 +33,18 @@ async fn handle_connection(
         push_bst.insert(PlayerArcWrapper::new(Player {
             name: name.to_string(),
             uuid: uuid!("F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4"),
-            servers: vec![],
+            servers: BTreeSet::new(),
         }));
 
         let mut lock = map.lock();
 
-        lock.insert(Arc::new(Mutex::new(Server {
+        lock.insert(ServerArcWrapper::new(Server {
             addr: SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]),
                 u8s_to_u16(buf[4], buf[5]),
             )),
             players: push_bst,
-        })))
+        }))
         .unwrap();
 
         let found = lock

@@ -1,23 +1,22 @@
-use std::{cmp::Ordering, error::Error, sync::Arc, vec};
+use std::{cmp::Ordering, collections::BTreeSet, error::Error, sync::Arc, vec};
 
-use parking_lot::Mutex;
 use tokio::io::AsyncWriteExt;
 use uuid::{uuid, Uuid};
 
-use crate::server_entry::Server;
+use crate::server_entry::ServerArcWrapper;
 
 #[derive(Debug)]
 pub struct Player {
     pub name: String,
     pub uuid: Uuid,
-    pub servers: Vec<Arc<Mutex<Server>>>,
+    pub servers: BTreeSet<ServerArcWrapper>,
 }
 
 impl Player {
     pub async fn deserialize() -> Result<Self, Box<dyn Error>> {
         let name = String::from("");
         let uuid = uuid!("9eaf436b-43eb-47f1-a26c-44306e076dfa");
-        let servers: Vec<Arc<Mutex<Server>>> = vec![];
+        let servers: BTreeSet<ServerArcWrapper> = BTreeSet::new();
 
         Ok(Player {
             name,
@@ -36,7 +35,13 @@ impl Player {
 
     #[allow(unused_variables)]
     pub fn update(&mut self, other: &Player) {
-        println!("Merging self '{:?}' with other '{:?}'", self, other);
+        println!(
+            "[Player] Merging self '{:?}' with other '{:?}'",
+            self, other
+        );
+        for server in &other.servers {
+            // let take = self.servers.contains(server);
+        }
     }
 }
 
@@ -73,7 +78,7 @@ impl Clone for Player {
         Player {
             name: self.name.clone(),
             uuid: self.uuid,
-            servers: vec![],
+            servers: BTreeSet::new(),
         }
     }
 }
