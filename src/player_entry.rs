@@ -40,7 +40,16 @@ impl Player {
             self, other
         );
         for server in &other.servers {
-            // let take = self.servers.contains(server);
+            let take = self.servers.take(server);
+            match take {
+                Some(mut_server) => {
+                    mut_server.lock().update(&server.lock());
+                    self.servers.insert(mut_server);
+                }
+                None => {
+                    self.servers.insert(server.clone());
+                }
+            }
         }
     }
 }
