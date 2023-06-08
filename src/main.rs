@@ -55,7 +55,7 @@ async fn handle_connection(
             .unwrap()
             .unwrap();
 
-        println!("found: {:?}", found.lock());
+        // println!("found: {:?}", found.lock());
 
         println!(
             "found players: {:?}",

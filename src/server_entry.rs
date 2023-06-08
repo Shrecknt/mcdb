@@ -10,10 +10,10 @@ pub struct Server {
 
 impl Server {
     pub fn update(&mut self, other: &Server) {
-        println!(
-            "[Server] Merging self '{:?}' with other '{:?}'",
-            self, other
-        );
+        // println!(
+        //     "[Server] Merging self '{:?}' with other '{:?}'",
+        //     self, other
+        // );
         let self_list = &mut self.players;
         for player in &other.players {
             let take = self_list.take(player);

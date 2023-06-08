@@ -28,7 +28,7 @@ impl ServerMap {
     }
 
     pub fn insert(&mut self, server_arc: ServerArcWrapper) -> Result<(), Box<dyn Error>> {
-        let server = server_arc.lock();
+        let mut server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
             _ => return Err("Not an IPv4 Address".into()),
@@ -80,7 +80,10 @@ impl ServerMap {
                 found.update(&player);
                 let has_server = player_has_server(&found, &server)?;
                 if !has_server {
+                    drop(server);
+                    // error here
                     found.servers.insert(server_arc.clone());
+                    server = server_arc.lock();
                 }
                 found
             } else {
@@ -91,8 +94,6 @@ impl ServerMap {
 
             self.player_array.insert(to_insert);
         }
-
-        drop(server);
 
         Ok(())
     }

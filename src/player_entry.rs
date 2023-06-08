@@ -35,10 +35,10 @@ impl Player {
 
     #[allow(unused_variables)]
     pub fn update(&mut self, other: &Player) {
-        println!(
-            "[Player] Merging self '{:?}' with other '{:?}'",
-            self, other
-        );
+        // println!(
+        //     "[Player] Merging self '{:?}' with other '{:?}'",
+        //     self, other
+        // );
         for server in &other.servers {
             let take = self.servers.take(server);
             match take {
