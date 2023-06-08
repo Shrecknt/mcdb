@@ -8,8 +8,8 @@ pub struct Server {
     pub players: BTreeSet<PlayerArcWrapper>,
 }
 
-#[allow(unused)]
 impl Server {
+    #[allow(unused_variables)]
     pub fn update(&mut self, other: &Server) {}
 }
 

@@ -1,10 +1,10 @@
-pub mod adt;
 pub mod player_entry;
 pub mod server_entry;
+pub mod server_map;
 
-use adt::ServerMap;
 use player_entry::Player;
 use server_entry::Server;
+use server_map::ServerMap;
 
 use std::collections::BTreeSet;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};

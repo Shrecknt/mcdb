@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::player_entry::{Player, PlayerArcWrapper};
+use crate::player_entry::Player;
 use crate::server_entry::Server;
 
 const PRE_RESERVE: bool = false;
@@ -28,6 +28,8 @@ impl ServerMap {
     }
 
     pub fn insert(&mut self, server_arc: Arc<Mutex<Server>>) -> Result<(), Box<dyn Error>> {
+        println!("insert");
+
         let server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
@@ -59,11 +61,15 @@ impl ServerMap {
             let mut temp_lock = temp.lock();
             temp_lock.update(&server);
             drop(temp_lock);
+
+            println!("AAAAA");
         } else {
             inserted_arc = server_arc.clone();
             open4.insert(server.addr.port(), inserted_arc.clone());
+
+            println!("BBBBB");
         }
-        println!("inserted_arc: {:?}", inserted_arc);
+        println!("server: {:?}", server);
 
         let server_players = server.players.clone();
         for player in server_players.iter() {
@@ -90,36 +96,11 @@ impl ServerMap {
                 res.servers.push(server_arc.clone());
                 res
             };
-            println!("A");
-
-            let mut server = inserted_arc.lock();
-
-            println!("to_insert: {to_insert:?}");
-            println!("server.players: {:?}", server.players);
-            let wrapper = PlayerArcWrapper::new(to_insert.clone());
-            let contains = server.players.contains(&wrapper);
-            println!("contains: {contains}");
-            let pull = server.players.take(&wrapper);
-            println!("pull: {pull:?}");
-            let pull_modified: PlayerArcWrapper = if pull.is_none() {
-                wrapper
-            } else {
-                let res = unsafe { pull.unwrap_unchecked() };
-                res.lock().update(&to_insert);
-                res
-            };
-
-            println!("inserting: {pull_modified:?}");
-            println!("server 1: {server:?}");
-
-            server.players.insert(pull_modified);
-
-            println!("server 2: {server:?}");
 
             self.player_array.insert(to_insert);
-
-            drop(server);
         }
+
+        drop(server);
 
         Ok(())
     }

@@ -90,19 +90,19 @@ impl PlayerArcWrapper {
 
 impl PartialOrd for PlayerArcWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.lock().partial_cmp(&other.0.lock().clone())
+        self.0.lock().partial_cmp(&other.0.lock())
     }
 }
 
 impl Ord for PlayerArcWrapper {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.lock().cmp(&other.0.lock().clone())
+        self.0.lock().cmp(&other.0.lock())
     }
 }
 
 impl PartialEq for PlayerArcWrapper {
     fn eq(&self, other: &Self) -> bool {
-        self.0.lock().eq(&other.0.lock().clone())
+        self.0.lock().eq(&other.0.lock())
     }
 }
 
