@@ -24,12 +24,12 @@ use crate::server_entry::ServerArcWrapper;
 async fn handle_connection(
     socket: &mut TcpStream,
     map: Arc<Mutex<ServerMap>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     loop {
         let mut buf = [0u8; 8];
         let _ = socket.read_exact(&mut buf).await?;
         let mut push_bst: BTreeSet<PlayerArcWrapper> = BTreeSet::new();
-        let name = std::str::from_utf8(&buf[6..8]).unwrap();
+        let name = std::str::from_utf8(&buf[6..8])?;
         push_bst.insert(PlayerArcWrapper::new(Player {
             name: name.to_string(),
             uuid: uuid!("F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4"),
@@ -44,28 +44,31 @@ async fn handle_connection(
                 u8s_to_u16(buf[4], buf[5]),
             )),
             players: push_bst,
-        }))
-        .unwrap();
+        }))?;
 
-        let found = lock
-            .find(SocketAddr::V4(SocketAddrV4::new(
-                Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]),
-                u8s_to_u16(buf[4], buf[5]),
-            )))
-            .unwrap()
-            .unwrap();
+        let found = lock.find(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]),
+            u8s_to_u16(buf[4], buf[5]),
+        )))?;
 
         // println!("found: {:?}", found.lock());
 
-        println!(
-            "found players: {:?}",
-            found
-                .lock()
-                .players
-                .iter()
-                .map(|item| { item.lock().name.clone() })
-                .collect::<Vec<String>>()
-        );
+        match found {
+            Some(found) => {
+                println!(
+                    "found players: {:?}",
+                    found
+                        .lock()
+                        .players
+                        .iter()
+                        .map(|item| { item.lock().name.clone() })
+                        .collect::<Vec<String>>()
+                );
+            }
+            None => {
+                println!("Not found");
+            }
+        }
 
         drop(lock);
     }

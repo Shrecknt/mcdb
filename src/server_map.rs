@@ -27,7 +27,10 @@ impl ServerMap {
         }
     }
 
-    pub fn insert(&mut self, server_arc: ServerArcWrapper) -> Result<(), Box<dyn Error>> {
+    pub fn insert(
+        &mut self,
+        server_arc: ServerArcWrapper,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut server = server_arc.lock();
         let octets: [u8; 4] = match server.addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
@@ -53,16 +56,19 @@ impl ServerMap {
         let open4 = open3.get_mut(&b).unwrap();
         let find = open4.get(&server.addr.port());
         let inserted_arc: ServerArcWrapper;
-        if find.is_some() {
-            inserted_arc = unsafe { find.unwrap_unchecked() }.clone();
-            let temp = inserted_arc.clone();
-            let mut temp_lock = temp.lock();
-            temp_lock.update(&server);
-            drop(temp_lock);
-        } else {
-            inserted_arc = server_arc.clone();
-            open4.insert(server.addr.port(), inserted_arc.clone());
-        }
+        match find {
+            Some(find) => {
+                inserted_arc = find.clone();
+                let temp = inserted_arc;
+                let mut temp_lock = temp.lock();
+                temp_lock.update(&server);
+                drop(temp_lock);
+            }
+            None => {
+                inserted_arc = server_arc.clone();
+                open4.insert(server.addr.port(), inserted_arc);
+            }
+        };
 
         let server_players = server.players.clone();
         for player in server_players.iter() {
@@ -75,21 +81,23 @@ impl ServerMap {
             // this is inefficient
             // TODO: use a RefCell?
             let found = self.player_array.take(&player);
-            let to_insert: Player = if found.is_some() {
-                let mut found = unsafe { found.unwrap_unchecked() };
-                found.update(&player);
-                let has_server = player_has_server(&found, &server)?;
-                if !has_server {
-                    drop(server);
-                    // error here
-                    found.servers.insert(server_arc.clone());
-                    server = server_arc.lock();
+            let to_insert: Player = match found {
+                Some(mut found) => {
+                    found.update(&player);
+                    let has_server = player_has_server(&found, &server)?;
+                    if !has_server {
+                        drop(server);
+                        // error here
+                        found.servers.insert(server_arc.clone());
+                        server = server_arc.lock();
+                    }
+                    found
                 }
-                found
-            } else {
-                let mut res = player.clone();
-                res.servers.insert(server_arc.clone());
-                res
+                None => {
+                    let mut res = player.clone();
+                    res.servers.insert(server_arc.clone());
+                    res
+                }
             };
 
             self.player_array.insert(to_insert);
@@ -98,7 +106,10 @@ impl ServerMap {
         Ok(())
     }
 
-    pub fn find(&mut self, addr: SocketAddr) -> Result<Option<ServerArcWrapper>, Box<dyn Error>> {
+    pub fn find(
+        &mut self,
+        addr: SocketAddr,
+    ) -> Result<Option<ServerArcWrapper>, Box<dyn Error + Send + Sync>> {
         let octets: [u8; 4] = match addr.ip() {
             IpAddr::V4(addr) => addr.octets(),
             _ => return Err("Not an IPv4 Address".into()),
@@ -140,7 +151,10 @@ fn u8s_to_u16(a: u8, b: u8) -> u16 {
     ((a as u16) << 8) | b as u16
 }
 
-fn player_has_server(player: &Player, server: &Server) -> Result<bool, Box<dyn Error>> {
+fn player_has_server(
+    player: &Player,
+    server: &Server,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
     for player_server in &player.servers {
         if *player_server.lock() == *server {
             return Ok(true);
