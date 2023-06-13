@@ -1,4 +1,10 @@
-use std::{cmp::Ordering, collections::BTreeSet, fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{
+    cmp::Ordering, collections::BTreeSet, error::Error, fmt::Debug, net::SocketAddr, str::FromStr,
+    sync::Arc,
+};
+
+use integer_encoding::{VarIntAsyncReader, VarIntAsyncWriter};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::player_entry::PlayerArcWrapper;
 
@@ -9,6 +15,39 @@ pub struct Server {
 }
 
 impl Server {
+    pub async fn deserialize(buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let res = Self::deserialize_pointer(buf).await?;
+        Ok(res)
+    }
+
+    pub async fn deserialize_pointer(mut buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let bytes_size = buf.read_varint_async().await?;
+        let mut bytes = vec![0u8; bytes_size];
+        buf.read_exact(&mut bytes).await?;
+        let addr_string = std::str::from_utf8(&bytes)?;
+        let addr = SocketAddr::from_str(addr_string)?;
+        let players: BTreeSet<PlayerArcWrapper> = BTreeSet::new();
+        Ok(Server { addr, players })
+    }
+
+    pub async fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+        let mut res = vec![];
+        let addr_string = self.addr.to_string();
+        let addr_bytes = addr_string.as_bytes();
+        res.write_varint_async(addr_bytes.len()).await?;
+        res.write_all(addr_bytes).await?;
+        Ok(res)
+    }
+
+    pub async fn serialize_pointer(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+        let mut res = vec![];
+        let addr_string = self.addr.to_string();
+        let addr_bytes = addr_string.as_bytes();
+        res.write_varint_async(addr_bytes.len()).await?;
+        res.write_all(addr_bytes).await?;
+        Ok(res)
+    }
+
     pub fn update(&mut self, other: &Server) {
         // println!(
         //     "[Server] Merging self '{:?}' with other '{:?}'",
