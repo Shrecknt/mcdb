@@ -20,11 +20,6 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn deserialize(buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let res = Self::deserialize_pointer(buf)?;
-        Ok(res)
-    }
-
     pub fn deserialize_pointer(mut buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let bytes_size = buf.read_varint()?;
         let mut bytes = vec![0u8; bytes_size];
