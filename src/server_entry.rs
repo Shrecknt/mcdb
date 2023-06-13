@@ -1,10 +1,15 @@
 use std::{
-    cmp::Ordering, collections::BTreeSet, error::Error, fmt::Debug, net::SocketAddr, str::FromStr,
+    cmp::Ordering,
+    collections::BTreeSet,
+    error::Error,
+    fmt::Debug,
+    io::{Read, Write},
+    net::SocketAddr,
+    str::FromStr,
     sync::Arc,
 };
 
-use integer_encoding::{VarIntAsyncReader, VarIntAsyncWriter};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use integer_encoding::{VarIntReader, VarIntWriter};
 
 use crate::player_entry::PlayerArcWrapper;
 
@@ -15,36 +20,43 @@ pub struct Server {
 }
 
 impl Server {
-    pub async fn deserialize(buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let res = Self::deserialize_pointer(buf).await?;
+    pub fn deserialize(buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let res = Self::deserialize_pointer(buf)?;
         Ok(res)
     }
 
-    pub async fn deserialize_pointer(mut buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let bytes_size = buf.read_varint_async().await?;
+    pub fn deserialize_pointer(mut buf: &[u8]) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let bytes_size = buf.read_varint()?;
         let mut bytes = vec![0u8; bytes_size];
-        buf.read_exact(&mut bytes).await?;
+        buf.read_exact(&mut bytes)?;
         let addr_string = std::str::from_utf8(&bytes)?;
         let addr = SocketAddr::from_str(addr_string)?;
         let players: BTreeSet<PlayerArcWrapper> = BTreeSet::new();
         Ok(Server { addr, players })
     }
 
-    pub async fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
         let addr_string = self.addr.to_string();
         let addr_bytes = addr_string.as_bytes();
-        res.write_varint_async(addr_bytes.len()).await?;
-        res.write_all(addr_bytes).await?;
+        res.write_varint(addr_bytes.len())?;
+        res.write_all(addr_bytes)?;
+        res.write_varint(self.players.len())?;
+        let server_players = self.players.iter();
+        for player in server_players {
+            let player_bytes = player.lock().serialize_pointer()?;
+            res.write_varint(player_bytes.len())?;
+            res.write_all(&player_bytes)?;
+        }
         Ok(res)
     }
 
-    pub async fn serialize_pointer(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+    pub fn serialize_pointer(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
         let addr_string = self.addr.to_string();
         let addr_bytes = addr_string.as_bytes();
-        res.write_varint_async(addr_bytes.len()).await?;
-        res.write_all(addr_bytes).await?;
+        res.write_varint(addr_bytes.len())?;
+        res.write_all(addr_bytes)?;
         Ok(res)
     }
 
