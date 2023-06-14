@@ -6,12 +6,15 @@ use player_entry::{Player, PlayerArcWrapper};
 use server_entry::{Server, ServerArcWrapper};
 use server_map::ServerMap;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::sync::mpsc::channel;
 use std::{error::Error, sync::Arc};
 
 use integer_encoding::VarIntWriter;
 use parking_lot::Mutex;
+use threadpool::ThreadPool;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
@@ -73,7 +76,7 @@ async fn handle_connection(
 async fn serialize_all(map: Arc<Mutex<ServerMap>>) -> Result<(), Box<dyn Error + Send + Sync>> {
     let lock = map.lock();
     let player_array = &lock.player_array;
-    let server_array = &lock.server_array;
+    let server_array = lock.server_array.to_owned();
 
     tokio::fs::create_dir_all("./data_bin/servers/").await?;
 
@@ -87,7 +90,7 @@ async fn serialize_all(map: Arc<Mutex<ServerMap>>) -> Result<(), Box<dyn Error +
     let mut player_buf: Vec<u8> = vec![];
     player_buf.write_varint(player_array.len())?;
     for player in player_array {
-        player_buf.write_all(&player.serialize()?).await?;
+        AsyncWriteExt::write_all(&mut player_buf, &player.serialize()?).await?;
     }
 
     println!("player_buf: {player_buf:X?}");
@@ -95,33 +98,61 @@ async fn serialize_all(map: Arc<Mutex<ServerMap>>) -> Result<(), Box<dyn Error +
     tokio::fs::write("./data_bin/players.bin", player_buf).await?;
     tokio::fs::remove_file("./data_bin/players.bin.old").await?;
 
+    let n_workers = 256;
+    let n_jobs = server_array.len();
+    let pool = ThreadPool::new(n_workers);
+
+    let (tx, rx) = channel();
+
     for (ip_a, server_range) in server_array {
-        let segment_a: u8;
-        let segment_b: u8;
-        {
-            let segments = (*ip_a).to_be_bytes();
-            segment_a = segments[0];
-            segment_b = segments[1];
+        let tx = tx.clone();
+        pool.execute(move || match serialize_server_range(ip_a, server_range) {
+            Ok(_res) => {
+                tx.send(false)
+                    .expect("channel will be there waiting for the pool");
+            }
+            Err(_err) => {
+                tx.send(true)
+                    .expect("channel will be there waiting for the pool");
+            }
+        });
+    }
+
+    println!("res: {:?}", rx.iter().take(n_jobs).collect::<Vec<bool>>());
+
+    println!("hello");
+
+    Ok(())
+}
+
+fn serialize_server_range(
+    ip_a: u16,
+    server_range: Arc<Mutex<HashMap<u16, HashMap<u16, ServerArcWrapper>>>>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let segment_a: u8;
+    let segment_b: u8;
+    {
+        let segments = ip_a.to_be_bytes();
+        segment_a = segments[0];
+        segment_b = segments[1];
+    }
+    std::fs::create_dir_all(format!("./data_bin/servers/{}/", segment_a))?;
+    for (_ip_b, ip_servers) in server_range.lock().iter() {
+        let mut stack = std::collections::LinkedList::new();
+        for (_port, server) in ip_servers {
+            let val = server.lock().serialize()?;
+            stack.push_back(val);
         }
-        tokio::fs::create_dir_all(format!("./data_bin/servers/{}/", segment_a)).await?;
-        for (_ip_b, ip_servers) in server_range.lock().iter() {
-            let mut stack = std::collections::LinkedList::new();
-            for (_port, server) in ip_servers {
-                let val = server.lock().serialize()?;
-                stack.push_back(val);
-            }
-            let total_len = stack.len();
-            let mut total_len_buf = vec![];
-            total_len_buf.write_varint(total_len)?;
-            let mut file = tokio::fs::File::open(format!(
-                "./data_bin/servers/{}/{}.bin",
-                segment_a, segment_b
-            ))
-            .await?;
-            file.write_all(&total_len_buf).await?;
-            for server in stack {
-                file.write_all(&server).await?;
-            }
+        let total_len = stack.len();
+        let mut total_len_buf = vec![];
+        total_len_buf.write_varint(total_len)?;
+        let mut file = std::fs::File::open(format!(
+            "./data_bin/servers/{}/{}.bin",
+            segment_a, segment_b
+        ))?;
+        file.write_all(&total_len_buf)?;
+        for server in stack {
+            file.write_all(&server)?;
         }
     }
 
