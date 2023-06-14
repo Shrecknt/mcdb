@@ -4,7 +4,6 @@ use std::{
     error::Error,
     io::{Read, Write},
     sync::Arc,
-    vec,
 };
 
 use integer_encoding::{VarIntReader, VarIntWriter};
