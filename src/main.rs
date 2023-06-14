@@ -10,8 +10,9 @@ use std::collections::BTreeSet;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::{error::Error, sync::Arc};
 
+use integer_encoding::VarIntWriter;
 use parking_lot::Mutex;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::spawn;
 use uuid::uuid;
@@ -69,6 +70,64 @@ async fn handle_connection(
     }
 }
 
+async fn serialize_all(map: Arc<Mutex<ServerMap>>) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let lock = map.lock();
+    let player_array = &lock.player_array;
+    let server_array = &lock.server_array;
+
+    tokio::fs::create_dir_all("./data_bin/servers/").await?;
+
+    if tokio::fs::try_exists("./data_bin/players.bin.old").await? {
+        tokio::fs::remove_file("./data_bin/players.bin.old").await?;
+    }
+    if tokio::fs::try_exists("./data_bin/players.bin").await? {
+        tokio::fs::rename("./data_bin/players.bin", "./data_bin/players.bin.old").await?;
+    }
+
+    let mut player_buf: Vec<u8> = vec![];
+    player_buf.write_varint(player_array.len())?;
+    for player in player_array {
+        player_buf.write_all(&player.serialize()?).await?;
+    }
+
+    println!("player_buf: {player_buf:X?}");
+
+    tokio::fs::write("./data_bin/players.bin", player_buf).await?;
+    tokio::fs::remove_file("./data_bin/players.bin.old").await?;
+
+    for (ip_a, server_range) in server_array {
+        let segment_a: u8;
+        let segment_b: u8;
+        {
+            let segments = (*ip_a).to_be_bytes();
+            segment_a = segments[0];
+            segment_b = segments[1];
+        }
+        tokio::fs::create_dir_all(format!("./data_bin/servers/{}/", segment_a)).await?;
+        for (_ip_b, ip_servers) in server_range.lock().iter() {
+            let mut stack = std::collections::LinkedList::new();
+            for (_port, server) in ip_servers {
+                let val = server.lock().serialize()?;
+                stack.push_back(val);
+            }
+            let total_len = stack.len();
+            let mut total_len_buf = vec![];
+            total_len_buf.write_varint(total_len)?;
+            let mut file = tokio::fs::File::open(format!(
+                "./data_bin/servers/{}/{}.bin",
+                segment_a, segment_b
+            ))
+            .await?;
+            file.write_all(&total_len_buf).await?;
+            for server in stack {
+                file.write_all(&server).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     {
@@ -96,6 +155,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let map = Arc::new(Mutex::new(ServerMap::new()));
 
+    serialize_all(map.clone()).await.unwrap();
+
     let listener = TcpListener::bind("127.0.0.1:38282").await?;
     loop {
         let (mut socket, _) = listener.accept().await?;
@@ -106,4 +167,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 fn u8s_to_u16(a: u8, b: u8) -> u16 {
     ((a as u16) << 8) | b as u16
+}
+
+#[allow(unused)]
+fn u16s_to_u32(a: u16, b: u16) -> u32 {
+    ((a as u32) << 16) | b as u32
 }

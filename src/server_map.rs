@@ -13,8 +13,8 @@ const PRE_RESERVE: bool = false;
 #[derive(Debug)]
 pub struct ServerMap {
     #[allow(clippy::type_complexity)]
-    server_array: HashMap<u16, Arc<Mutex<HashMap<u16, HashMap<u16, ServerArcWrapper>>>>>,
-    player_array: BTreeSet<Player>,
+    pub server_array: HashMap<u16, Arc<Mutex<HashMap<u16, HashMap<u16, ServerArcWrapper>>>>>,
+    pub player_array: BTreeSet<Player>,
 }
 
 impl ServerMap {
