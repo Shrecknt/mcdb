@@ -30,6 +30,14 @@ impl Server {
         Ok(Server { addr, players })
     }
 
+    /*--- Server -------------------------------------------|
+    | field name        | type              | size          |
+    |-------------------------------------------------------|
+    | address length    | varint            | variable size |
+    | server address    | string            | variable size |
+    | players length    | varint            | variable size |
+    | player list       | PlayerPointer[]   | variable size |
+    |------------------------------------------------------*/
     pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
         let addr_string = self.addr.to_string();
@@ -46,6 +54,12 @@ impl Server {
         Ok(res)
     }
 
+    /*--- Server Pointer ---------------------------|
+    | field name        | type      | size          |
+    |-----------------------------------------------|
+    | address length    | varint    | variable size |
+    | server address    | string    | variable size |
+    |----------------------------------------------*/
     pub fn serialize_pointer(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
         let addr_string = self.addr.to_string();

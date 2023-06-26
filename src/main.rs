@@ -108,19 +108,24 @@ async fn serialize_all(map: Arc<Mutex<ServerMap>>) -> Result<(), Box<dyn Error +
         let tx = tx.clone();
         pool.execute(move || match serialize_server_range(ip_a, server_range) {
             Ok(_res) => {
-                tx.send(false)
+                tx.send(None)
                     .expect("channel will be there waiting for the pool");
             }
-            Err(_err) => {
-                tx.send(true)
+            Err(err) => {
+                tx.send(Some(err))
                     .expect("channel will be there waiting for the pool");
             }
         });
     }
 
-    println!("res: {:?}", rx.iter().take(n_jobs).collect::<Vec<bool>>());
+    let success: bool = rx.iter().take(n_jobs).fold(true, |acc, x| {
+        if let Some(err) = &x {
+            println!("Error: {err}");
+        }
+        acc && x.is_none()
+    });
 
-    println!("hello");
+    println!("success: {success}");
 
     Ok(())
 }

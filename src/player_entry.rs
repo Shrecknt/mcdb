@@ -40,8 +40,20 @@ impl Player {
         }
     }
 
+    /*--- Player ---------------------------------------|
+    | field name    | type              | size          |
+    |---------------------------------------------------|
+    | name length   | varint            | variable size |
+    | player name   | string            | variable size |
+    | player uuid   | uuid              | 16 bytes      |
+    | num servers   | varint            | variable size |
+    | server list   | ServerPointer[]   | variable size |
+    |--------------------------------------------------*/
     pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
+        let name_bytes = self.name.as_bytes();
+        res.write_varint(name_bytes.len())?;
+        res.write_all(name_bytes)?;
         let uuid_bytes: &[u8; 16] = self.uuid.as_bytes();
         res.write_all(uuid_bytes)?;
         res.write_varint(self.servers.len())?;
@@ -54,6 +66,13 @@ impl Player {
         Ok(res)
     }
 
+    /*--- Player Pointer -----------------------|
+    | field name    | type      | size          |
+    |-------------------------------------------|
+    | name length   | varint    | variable size |
+    | player name   | string    | variable size |
+    | player uuid   | uuid      | 16 bytes      |
+    |------------------------------------------*/
     pub fn serialize_pointer(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut res = vec![];
         let name_bytes = self.name.as_bytes();
